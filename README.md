@@ -19,7 +19,7 @@ A powerful Python script for automatically sending messages to multiple Telegram
 
 📊 Real-Time Monitoring - Live status updates and progress tracking
 
-⚡ Quick Start
+# ⚡ Quick Start
 
 Get Telegram API Credentials
 
@@ -114,4 +114,7 @@ Let the script do the work!
 Permanent account bans by Telegram
 
 Legal action under cybercrime laws
+
+# 📜 License
+This project is licensed under the MIT License - see the LICENSE file for details.
 
