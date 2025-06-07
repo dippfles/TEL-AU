@@ -12,13 +12,7 @@ Message Management: Delivery logging & automatic error handling
 
 Secure: Encrypted credential storage
 
-Users must:
-
-Obtain recipient consent
-
-Respect Telegram's rate limits (~30 msgs/sec)
-
-Avoid disrupting user experience
+**Avoid disrupting user experience**
 
 # ⚠️ Violations may result in:
 
