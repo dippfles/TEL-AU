@@ -12,16 +12,54 @@ class TelegramForwarder:
         self.phone_number = phone_number
         self.client = TelegramClient('session_' + phone_number, api_id, api_hash)
 
+    async def login(self):
+        """Handle login process and save session"""
+        print("🔐 Starting login process...")
+        await self.client.connect()
+
+        if await self.client.is_user_authorized():
+            print("✅ Already logged in!")
+            return True
+
+        try:
+            print(f"📱 Sending verification code to {self.phone_number}...")
+            await self.client.send_code_request(self.phone_number)
+            
+            code = input('🔑Enter the verification code: ')
+            await self.client.sign_in(self.phone_number, code)
+            
+        except errors.rpcerrorlist.SessionPasswordNeededError:
+            password = input('🔑Two-step verification is enabled. Enter your password: ')
+            await self.client.sign_in(password=password)
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
+            return False
+
+        print("✅ Login successful! Session saved.")
+        return True
+
+    async def check_session(self):
+        """Check if session exists and is valid"""
+        try:
+            await self.client.connect()
+            if await self.client.is_user_authorized():
+                me = await self.client.get_me()
+                print(f"✅ Session is valid. Logged in as: {me.first_name} (@{me.username or 'No username'})")
+                return True
+            else:
+                print("❌ Session exists but not authorized.")
+                return False
+        except Exception as e:
+            print(f"❌ Session check failed: {e}")
+            return False
+
     async def list_chats(self):
         await self.client.connect()
 
+        # Session should already be validated before calling this
         if not await self.client.is_user_authorized():
-            await self.client.send_code_request(self.phone_number)
-            try:
-                await self.client.sign_in(self.phone_number, input('🔑Enter the code: '))
-            except errors.rpcerrorlist.SessionPasswordNeededError:
-                password = input('🔑Two-step verification is enabled. Enter your password: ')
-                await self.client.sign_in(password=password)
+            print("❌ Not authorized. Please login first.")
+            return
 
         dialogs = await self.client.get_dialogs(limit=None)
         with open(f"chats_of_{self.phone_number}.txt", "w", encoding="utf-8") as chats_file:
@@ -137,9 +175,10 @@ class TelegramForwarder:
         """Send messages to multiple chats with different intervals for each"""
         await self.client.connect()
 
+        # Session should already be validated before calling this
         if not await self.client.is_user_authorized():
-            await self.client.send_code_request(self.phone_number)
-            await self.client.sign_in(self.phone_number, input('🔑Enter the code: '))
+            print("❌ Not authorized. Please login first.")
+            return
 
         # Create tasks for each chat with their specific intervals
         tasks = []
@@ -174,6 +213,31 @@ def write_credentials(api_id, api_hash, phone_number):
         file.write(api_id + "\n")
         file.write(api_hash + "\n")
         file.write(phone_number + "\n")
+
+def check_session_file_exists(phone_number):
+    """Check if session file exists"""
+    import os
+    session_file = f"session_{phone_number}.session"
+    return os.path.exists(session_file)
+
+def show_login_menu():
+    """Show login menu options"""
+    print("\n🔐 LOGIN REQUIRED")
+    print("You need to login first before using other features.")
+    print("\nChoose an option:")
+    print("1. Login to Telegram")
+    print("2. Exit")
+    return input("Enter your choice: ").strip()
+
+def show_main_menu():
+    """Show main menu options"""
+    print("\nAUTOMATIC SENDER TOOLS BY dippfles 😒👌")
+    print("Choose an option:")
+    print("1. List Chats")
+    print("2. Send Message (Text/Image) to Multiple Chats with Custom Intervals")
+    print("3. Logout")
+    print("4. Exit")
+    return input("Enter your choice: ").strip()
 
 def get_time_interval_for_chat(chat_id):
     """Get custom time interval for a specific chat"""
@@ -256,49 +320,101 @@ async def main():
     api_id, api_hash, phone_number = read_credentials()
 
     if api_id is None or api_hash is None or phone_number is None:
+        print("🔧 INITIAL SETUP")
         api_id = input("🔑Enter your API ID: ")
         api_hash = input("🔑Enter your API Hash: ")
-        phone_number = input("🔑Enter your phone number: ")
+        phone_number = input("🔑Enter your phone number (with country code): ")
         write_credentials(api_id, api_hash, phone_number)
+        print("✅ Credentials saved!")
 
     forwarder = TelegramForwarder(api_id, api_hash, phone_number)
     
-    print("AUTOMATIC SENDER TOOLS BY dippfles 😒👌")
-    print("Choose an option:")
-    print("1. List Chats")
-    print("2. Send Message (Text/Image) to Multiple Chats with Custom Intervals")
-
-    choice = input("Enter your choice: ")
-
-    if choice == "1":
-        await forwarder.list_chats()
-    elif choice == "2":
-        # Setup chat configurations with individual intervals
-        chat_configs = setup_chat_configs()
-        
-        if chat_configs is None:
-            print("❌ No chat configurations available. Exiting...")
-            return
-        
-        text = input("\n📝Enter the text to send: ")
-        
-        send_image = input("🏳️Do you want to send an image? (yes/no): ").strip().lower()
-        image_path = None
-        if send_image == "yes":
-            image_path = input("🏳️Enter the image file path: ").strip()
-            # Validate image path
-            import os
-            if not os.path.exists(image_path):
-                print(f"⚠️ Warning: Image file '{image_path}' not found. Continuing with text only.")
+    # Check if session exists and is valid
+    session_exists = check_session_file_exists(phone_number)
+    session_valid = False
+    
+    if session_exists:
+        print("📱 Checking existing session...")
+        session_valid = await forwarder.check_session()
+    
+    # Main application loop
+    while True:
+        if not session_valid:
+            # Show login menu
+            choice = show_login_menu()
+            
+            if choice == "1":
+                if await forwarder.login():
+                    session_valid = True
+                    print("🎉 You can now use all features!")
+                else:
+                    print("❌ Login failed. Please try again.")
+            elif choice == "2":
+                print("👋 Goodbye!")
+                break
+            else:
+                print("❌ Invalid choice. Please try again.")
+        else:
+            # Show main menu
+            choice = show_main_menu()
+            
+            if choice == "1":
+                print("\n📋 LISTING CHATS...")
+                await forwarder.list_chats()
+                
+            elif choice == "2":
+                print("\n🚀 MESSAGE SENDER...")
+                # Setup chat configurations with individual intervals
+                chat_configs = setup_chat_configs()
+                
+                if chat_configs is None:
+                    print("❌ No chat configurations available.")
+                    continue
+                
+                text = input("\n📝Enter the text to send: ")
+                
+                send_image = input("🏳️Do you want to send an image? (yes/no): ").strip().lower()
                 image_path = None
+                if send_image == "yes":
+                    image_path = input("🏳️Enter the image file path: ").strip()
+                    # Validate image path
+                    import os
+                    if not os.path.exists(image_path):
+                        print(f"⚠️ Warning: Image file '{image_path}' not found. Continuing with text only.")
+                        image_path = None
 
-        print(f"\n🚀 Starting to send messages to {len(chat_configs)} chat(s) with different intervals...")
-        print("💡 Note: Invalid chat IDs will be automatically skipped after validation")
-        print("Press Ctrl+C to stop all sending tasks")
-        
-        await forwarder.send_message_periodically_multi_interval(chat_configs, text, image_path)
-    else:
-        print("Invalid choice")
+                print(f"\n🚀 Starting to send messages to {len(chat_configs)} chat(s) with different intervals...")
+                print("💡 Note: Invalid chat IDs will be automatically skipped after validation")
+                print("Press Ctrl+C to stop all sending tasks")
+                
+                try:
+                    await forwarder.send_message_periodically_multi_interval(chat_configs, text, image_path)
+                except KeyboardInterrupt:
+                    print("\n⏹️ Stopped by user.")
+                    
+            elif choice == "3":
+                print("\n🚪 LOGOUT...")
+                # Delete session file
+                import os
+                session_file = f"session_{phone_number}.session"
+                try:
+                    if os.path.exists(session_file):
+                        os.remove(session_file)
+                    if os.path.exists(session_file + "-journal"):
+                        os.remove(session_file + "-journal")
+                    print("✅ Logged out successfully!")
+                    session_valid = False
+                except Exception as e:
+                    print(f"⚠️ Error during logout: {e}")
+                    
+            elif choice == "4":
+                print("👋 Goodbye!")
+                break
+                
+            else:
+                print("❌ Invalid choice. Please try again.")
+                
+        print()  # Add blank line for better readability
 
 if __name__ == "__main__":
     asyncio.run(main())
