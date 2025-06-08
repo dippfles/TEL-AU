@@ -1,4 +1,4 @@
-# TELAU
+# TEL-AU
 A powerful Python script for automatically sending messages to multiple Telegram chats with customizable intervals. Perfect for broadcasting, notifications, and automated messaging needs.
 
 **🌟 Key Features**
