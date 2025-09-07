@@ -1,5 +1,6 @@
 import time
 import asyncio
+import os
 from telethon.sync import TelegramClient
 from telethon import errors
 from telethon.tl.functions.channels import GetForumTopicsRequest
@@ -216,9 +217,24 @@ def write_credentials(api_id, api_hash, phone_number):
 
 def check_session_file_exists(phone_number):
     """Check if session file exists"""
-    import os
     session_file = f"session_{phone_number}.session"
     return os.path.exists(session_file)
+
+def read_text_from_file(file_path):
+    """Read text content from a file"""
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read().strip()
+            if not content:
+                print(f"⚠️ Warning: File '{file_path}' is empty.")
+                return None
+            return content
+    except FileNotFoundError:
+        print(f"❌ Error: File '{file_path}' not found.")
+        return None
+    except Exception as e:
+        print(f"❌ Error reading file '{file_path}': {e}")
+        return None
 
 def show_login_menu():
     """Show login menu options"""
@@ -235,8 +251,9 @@ def show_main_menu():
     print("Choose an option:")
     print("1. List Chats")
     print("2. Send Message (Text/Image) to Multiple Chats with Custom Intervals")
-    print("3. Logout")
-    print("4. Exit")
+    print("3. Send Message from Text File to Multiple Chats with Custom Intervals")
+    print("4. Logout")
+    print("5. Exit")
     return input("Enter your choice: ").strip()
 
 def get_time_interval_for_chat(chat_id):
@@ -378,7 +395,6 @@ async def main():
                 if send_image == "yes":
                     image_path = input("🏳️Enter the image file path: ").strip()
                     # Validate image path
-                    import os
                     if not os.path.exists(image_path):
                         print(f"⚠️ Warning: Image file '{image_path}' not found. Continuing with text only.")
                         image_path = None
@@ -393,9 +409,54 @@ async def main():
                     print("\n⏹️ Stopped by user.")
                     
             elif choice == "3":
+                print("\n📄 MESSAGE SENDER FROM TEXT FILE...")
+                # Setup chat configurations with individual intervals
+                chat_configs = setup_chat_configs()
+                
+                if chat_configs is None:
+                    print("❌ No chat configurations available.")
+                    continue
+                
+                # Get text file path
+                file_path = input("\n📁Enter the path to your text file (.txt): ").strip()
+                
+                # Read text from file
+                text = read_text_from_file(file_path)
+                if text is None:
+                    print("❌ Could not read text from file. Operation cancelled.")
+                    continue
+                
+                print(f"✅ Successfully loaded text from file:")
+                print(f"📝 Text preview (first 100 characters): {text[:100]}{'...' if len(text) > 100 else ''}")
+                print(f"📊 Total characters: {len(text)}")
+                
+                # Confirm before sending
+                confirm = input("\n❓Proceed with sending this text? (yes/no): ").strip().lower()
+                if confirm != "yes":
+                    print("❌ Operation cancelled.")
+                    continue
+                
+                send_image = input("🏳️Do you want to send an image with the text? (yes/no): ").strip().lower()
+                image_path = None
+                if send_image == "yes":
+                    image_path = input("🏳️Enter the image file path: ").strip()
+                    # Validate image path
+                    if not os.path.exists(image_path):
+                        print(f"⚠️ Warning: Image file '{image_path}' not found. Continuing with text only.")
+                        image_path = None
+
+                print(f"\n🚀 Starting to send messages from file to {len(chat_configs)} chat(s) with different intervals...")
+                print("💡 Note: Invalid chat IDs will be automatically skipped after validation")
+                print("Press Ctrl+C to stop all sending tasks")
+                
+                try:
+                    await forwarder.send_message_periodically_multi_interval(chat_configs, text, image_path)
+                except KeyboardInterrupt:
+                    print("\n⏹️ Stopped by user.")
+                    
+            elif choice == "4":
                 print("\n🚪 LOGOUT...")
                 # Delete session file
-                import os
                 session_file = f"session_{phone_number}.session"
                 try:
                     if os.path.exists(session_file):
@@ -407,7 +468,7 @@ async def main():
                 except Exception as e:
                     print(f"⚠️ Error during logout: {e}")
                     
-            elif choice == "4":
+            elif choice == "5":
                 print("👋 Goodbye!")
                 break
                 
